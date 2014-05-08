@@ -261,7 +261,7 @@ lookup k0 m0 = go h0 k0 0 m0
     go h k s (Full v) = go h k (s+bitsPerSubkey) (A.index v (index h s))
     go _ _ _ Empty = Nothing
     go h k _ (Leaf hx (L kx x))
-        | h == hx && k == kx = Just x  -- TODO: Split test in two
+        | h == hx && ((k `ptrEq` kx) || (k == kx)) = Just x  -- TODO: Split test in two
         | otherwise          = Nothing
     go h k _ (Collision hx v)
         | h == hx   = lookupInArray k v
@@ -332,7 +332,7 @@ insert k0 v0 m0 = go h0 k0 v0 0 m0
       where i = index h s
     go h k x _ Empty = Leaf h (L k x)
     go h k x s t@(Leaf hy l@(L ky y))
-        | hy == h = if ky == k
+        | hy == h = if (ky `ptrEq` k) || (ky == k)
                     then if x `ptrEq` y
                          then t
                          else Leaf h (L k x)
@@ -943,7 +943,7 @@ lookupInArray k0 ary0 = go k0 ary0 0 (A.length ary0)
         | i >= n    = Nothing
         | otherwise = case A.index ary i of
             (L kx v)
-                | k == kx   -> Just v
+                | ptrEq k kx || k == kx -> Just v
                 | otherwise -> go k ary (i+1) n
 {-# INLINABLE lookupInArray #-}
 

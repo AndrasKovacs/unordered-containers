@@ -254,15 +254,15 @@ lookup :: (Eq k, Hashable k) => k -> HashMap k v -> Maybe v
 lookup k0 m0 = go h0 k0 0 m0
   where
     h0 = hash k0
-    go !_ !_ !_ Empty = Nothing
-    go h k _ (Leaf hx (L kx x))
-        | h == hx && k == kx = Just x  -- TODO: Split test in two
-        | otherwise          = Nothing
-    go h k s (BitmapIndexed b v)
+    go !h !k !s (BitmapIndexed b v)
         | b .&. m == 0 = Nothing
         | otherwise    = go h k (s+bitsPerSubkey) (A.index v (sparseIndex b m))
       where m = mask h s
     go h k s (Full v) = go h k (s+bitsPerSubkey) (A.index v (index h s))
+    go _ _ _ Empty = Nothing
+    go h k _ (Leaf hx (L kx x))
+        | h == hx && k == kx = Just x  -- TODO: Split test in two
+        | otherwise          = Nothing
     go h k _ (Collision hx v)
         | h == hx   = lookupInArray k v
         | otherwise = Nothing
@@ -311,15 +311,7 @@ insert :: (Eq k, Hashable k) => k -> v -> HashMap k v -> HashMap k v
 insert k0 v0 m0 = go h0 k0 v0 0 m0
   where
     h0 = hash k0
-    go !h !k x !_ Empty = Leaf h (L k x)
-    go h k x s t@(Leaf hy l@(L ky y))
-        | hy == h = if ky == k
-                    then if x `ptrEq` y
-                         then t
-                         else Leaf h (L k x)
-                    else collision h l (L k x)
-        | otherwise = runST (two s h k x hy ky y)
-    go h k x s t@(BitmapIndexed b ary)
+    go !h !k x !s t@(BitmapIndexed b ary)
         | b .&. m == 0 =
             let !ary' = A.insert ary i $! Leaf h (L k x)
             in bitmapIndexedOrFull (b .|. m) ary'
@@ -338,6 +330,14 @@ insert k0 v0 m0 = go h0 k0 v0 0 m0
             then t
             else Full (update16 ary i st')
       where i = index h s
+    go h k x _ Empty = Leaf h (L k x)
+    go h k x s t@(Leaf hy l@(L ky y))
+        | hy == h = if ky == k
+                    then if x `ptrEq` y
+                         then t
+                         else Leaf h (L k x)
+                    else collision h l (L k x)
+        | otherwise = runST (two s h k x hy ky y)
     go h k x s t@(Collision hy v)
         | h == hy   = Collision h (updateOrSnocWith const k x v)
         | otherwise = go h k x s $ BitmapIndexed (mask hy s) (A.singleton t)
